@@ -227,7 +227,7 @@ class NonnegMean:
         return min(1, 1 / np.max(terms)), np.minimum(1, 1 / terms)
 
     def fixed_alternative_mean(self, x: np.array, **kwargs) -> np.array:
-        """
+        r"""
         Compute the alternative mean just before the jth draw, for a fixed alternative that the original population
         mean is eta.
         Throws a warning if the sample implies that the fixed alternative is false (because the population would
@@ -262,7 +262,7 @@ class NonnegMean:
         return m
 
     def shrink_trunc(self, x: np.array, **kwargs) -> np.array:
-        """
+        r"""
         apply shrinkage/truncation estimator to an array to construct a sequence of "alternative" values
 
         sample mean is shrunk towards eta, with relative weight d compared to a single observation,
@@ -367,7 +367,7 @@ class NonnegMean:
         return self.lam * np.ones_like(x)
 
     def agrapa(self, x: np.array, **kwargs) -> np.array:
-        """
+        r"""
         maximize approximate growth rate adapted to the particular alternative (aGRAPA) bet of Waudby-Smith & Ramdas (WSR)
 
         This implementation alters the method from support \mu \in [0, 1] to \mu \in [0, u], and to constrain
@@ -561,7 +561,7 @@ class NonnegMean:
         ), np.minimum(p_history, 1)
 
     def kaplan_wald(self, x: np.array, **kwargs) -> tuple[float, np.array]:
-        """
+        r"""
         Kaplan-Wald p-value for the hypothesis that the sample x is drawn IID from a population
         with mean t against the alternative that the mean is less than t.
 
