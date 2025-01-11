@@ -122,10 +122,12 @@ class NonnegMean:
         atol = kwargs.get("atol", 2 * np.finfo(float).eps)
         rtol = kwargs.get("rtol", 10**-6)
         _S, Stot, _j, m = self.sjm(N, t, x)
+
         x = np.array(x)
         with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
             etaj = self.estim(x)
             terms = np.cumprod((x * etaj / m + (u - x) * (u - etaj) / (u - m)) / u)
+
         terms[m > u] = 0  # true mean is certainly less than hypothesized
         terms[np.isclose(0, m, atol=atol)] = 1  # ignore
         terms[np.isclose(u, m, atol=atol, rtol=rtol)] = 1  # ignore
@@ -268,7 +270,7 @@ class NonnegMean:
         sample mean is shrunk towards eta, with relative weight d compared to a single observation,
         then that combination is shrunk towards u, with relative weight f/(stdev(x)).
 
-        The result is truncated above at u*(1-eps) and below at m_j+e_j(c,j)
+        The result is truncated above at u*(1-eps) and below at m_j+e_j(c,j) -- TODO update this to reflect code
 
         Shrinking towards eta stabilizes the sample mean as an estimate of the population mean.
         Shrinking towards u takes advantage of low-variance samples to grow the test statistic more rapidly.
@@ -291,7 +293,7 @@ class NonnegMean:
             eta: float in (t, u) (default u*(1-eps))
                 initial alternative hypothethesized value for the population mean
             c: positive float
-                scale factor for allowing the estimated mean to approach t from above
+                scale factor for allowing the estimated mean to approach t from above and u from below
             d: positive float
                 relative weight of eta compared to an observation, in updating the alternative for each term
             f: positive float
@@ -316,10 +318,11 @@ class NonnegMean:
         sdj = np.insert(np.maximum(sdj, minsd), 0, 1)[0:-1]
         sdj[1] = 1
         weighted = ((d * eta + S) / (d + j - 1) + u * f / sdj) / (1 + f / sdj)
-        return np.minimum(
-            u * (1 - np.finfo(float).eps),
-            np.maximum(weighted, m + c / np.sqrt(d + j - 1)),
-        )
+        lower_bound = np.clip(m + c / np.sqrt(d + j - 1), m + np.finfo(float).eps, u)
+        upper_bound = np.clip(u * (1 - c / np.sqrt(d + j - 1)), m + np.finfo(float).eps, u)
+        upper_bound = np.maximum(upper_bound, lower_bound)  # ensure upper_bound >= lower_bound, lower bound takes precedence FIXME ?
+
+        return np.clip(weighted, lower_bound, upper_bound)
 
     def optimal_comparison(self, x: np.array, **kwargs) -> np.array:
         """
@@ -340,7 +343,7 @@ class NonnegMean:
         ----------
         x: np.array
             input data
-        rate_error_2: float
+        error_rate_2: float
             hypothesized rate of two-vote overstatements
 
         Returns
@@ -350,7 +353,7 @@ class NonnegMean:
         """
         # set the parameters
         # TO DO: double check where rate_error_2 is set
-        p2 = getattr(self, "rate_error_2", 1e-4)  # rate of 2-vote overstatement errors
+        p2 = getattr(self, "error_rate_2", 1e-4)  # rate of 2-vote overstatement errors
         return (1 - self.u * (1 - p2)) / (2 - 2 * self.u) + self.u * (1 - p2) - 1 / 2
 
     def fixed_bet(self, x: np.array, **kwargs) -> np.array:
