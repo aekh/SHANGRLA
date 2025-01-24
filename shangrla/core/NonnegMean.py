@@ -265,6 +265,8 @@ class NonnegMean:
 
     def shrink_trunc(self, x: np.array, **kwargs) -> np.array:
         r"""
+        TODO: update this docstring to reflect the fixed code!
+
         apply shrinkage/truncation estimator to an array to construct a sequence of "alternative" values
 
         sample mean is shrunk towards eta, with relative weight d compared to a single observation,
@@ -307,7 +309,8 @@ class NonnegMean:
         N = self.N
         t = self.t
         eta = getattr(self, "eta", u * (1 - np.finfo(float).eps))
-        c = getattr(self, "c", 1 / 2)
+        # c = getattr(self, "c", 1 / 2)
+        c = getattr(self, "c", (eta - t) / 2)  # better default
         d = getattr(self, "d", 100)
         f = getattr(self, "f", 0)
         minsd = getattr(self, "minsd", 10**-6)
@@ -318,10 +321,17 @@ class NonnegMean:
         sdj = np.insert(np.maximum(sdj, minsd), 0, 1)[0:-1]
         sdj[1] = 1
         weighted = ((d * eta + S) / (d + j - 1) + u * f / sdj) / (1 + f / sdj)
-        lower_bound = np.clip(m + c / np.sqrt(d + j - 1), m + np.finfo(float).eps, u)
-        upper_bound = np.clip(u * (1 - c / np.sqrt(d + j - 1)), m + np.finfo(float).eps, u)
-        upper_bound = np.maximum(upper_bound, lower_bound)  # ensure upper_bound >= lower_bound, lower bound takes precedence FIXME ?
 
+        # defensive programming: ensure that lower and upper bound are in (m, u), disallowing u to not bet the farm
+        lower_bound = np.clip(m + c / np.sqrt(d + j - 1), m + np.finfo(float).eps, u - np.finfo(float).eps)
+        upper_bound = np.clip(u * (1 - c / np.sqrt(d + j - 1)), m + np.finfo(float).eps, u - np.finfo(float).eps)
+
+        # ensure upper_bound >= lower_bound. If they cross, set them to the midpoint
+        squeeze = (upper_bound+lower_bound)/2
+        upper_bound = np.maximum(upper_bound, squeeze)
+        lower_bound = np.minimum(lower_bound, squeeze)
+
+        # cap too aggressive estimates with lower and upper bounds
         return np.clip(weighted, lower_bound, upper_bound)
 
     def optimal_comparison(self, x: np.array, **kwargs) -> np.array:
