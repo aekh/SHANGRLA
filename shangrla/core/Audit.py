@@ -2281,7 +2281,7 @@ class Assertion:
 
     @classmethod
     def set_p_values(
-        cls, contests: dict, mvr_sample: list, cvr_sample: list = None
+        cls, contests: dict, mvr_sample: list, cvr_sample: list = None, use_all=False
     ) -> float:
         """
         Find the p-value for every assertion and update assertions & contests accordingly
@@ -2323,7 +2323,7 @@ class Assertion:
             con.proved = {}
             contest_max_p = 0
             for a, asn in con.assertions.items():
-                d, u = asn.mvrs_to_data(mvr_sample, cvr_sample)
+                d, u = asn.mvrs_to_data(mvr_sample, cvr_sample, use_all=use_all)
                 asn.test.u = u  # set upper bound for the test for each assorter
                 asn.p_value, asn.p_history = asn.test.test(d)
                 asn.proved = (asn.p_value <= con.risk_limit) or asn.proved

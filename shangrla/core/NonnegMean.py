@@ -122,10 +122,12 @@ class NonnegMean:
         atol = kwargs.get("atol", 2 * np.finfo(float).eps)
         rtol = kwargs.get("rtol", 10**-6)
         _S, Stot, _j, m = self.sjm(N, t, x)
+
         x = np.array(x)
         with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
             etaj = self.estim(x)
             terms = np.cumprod((x * etaj / m + (u - x) * (u - etaj) / (u - m)) / u)
+
         terms[m > u] = 0  # true mean is certainly less than hypothesized
         terms[np.isclose(0, m, atol=atol)] = 1  # ignore
         terms[np.isclose(u, m, atol=atol, rtol=rtol)] = 1  # ignore
@@ -227,7 +229,7 @@ class NonnegMean:
         return min(1, 1 / np.max(terms)), np.minimum(1, 1 / terms)
 
     def fixed_alternative_mean(self, x: np.array, **kwargs) -> np.array:
-        """
+        r"""
         Compute the alternative mean just before the jth draw, for a fixed alternative that the original population
         mean is eta.
         Throws a warning if the sample implies that the fixed alternative is false (because the population would
@@ -262,13 +264,15 @@ class NonnegMean:
         return m
 
     def shrink_trunc(self, x: np.array, **kwargs) -> np.array:
-        """
+        r"""
+        TODO: update this docstring to reflect the fixed code!
+
         apply shrinkage/truncation estimator to an array to construct a sequence of "alternative" values
 
         sample mean is shrunk towards eta, with relative weight d compared to a single observation,
         then that combination is shrunk towards u, with relative weight f/(stdev(x)).
 
-        The result is truncated above at u*(1-eps) and below at m_j+e_j(c,j)
+        The result is truncated above at u*(1-eps) and below at m_j+e_j(c,j) -- TODO update this to reflect code
 
         Shrinking towards eta stabilizes the sample mean as an estimate of the population mean.
         Shrinking towards u takes advantage of low-variance samples to grow the test statistic more rapidly.
@@ -291,7 +295,7 @@ class NonnegMean:
             eta: float in (t, u) (default u*(1-eps))
                 initial alternative hypothethesized value for the population mean
             c: positive float
-                scale factor in constraints to keep the estimator of the mean from getting too close to t or u before 
+                scale factor in constraints to keep the estimator of the mean from getting too close to t or u before
                 the empirical mean is stable
             d: positive float
                 relative weight of eta compared to an observation, in updating the alternative for each term
@@ -400,7 +404,7 @@ class NonnegMean:
         
 
     def agrapa(self, x: np.array, **kwargs) -> np.array:
-        """
+        r"""
         maximize approximate growth rate adapted to the particular alternative (aGRAPA) bet of Waudby-Smith & Ramdas (WSR)
 
         This implementation alters the method from support \mu \in [0, 1] to \mu \in [0, u], and to constrain
@@ -594,7 +598,7 @@ class NonnegMean:
         ), np.minimum(p_history, 1)
 
     def kaplan_wald(self, x: np.array, **kwargs) -> tuple[float, np.array]:
-        """
+        r"""
         Kaplan-Wald p-value for the hypothesis that the sample x is drawn IID from a population
         with mean t against the alternative that the mean is less than t.
 
