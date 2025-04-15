@@ -1162,10 +1162,9 @@ class Audit:
             assert (
                 con.risk_limit <= 1 / 2
             ), f"risk limit {con.risk_limit} exceeds 1/2 in contest {c}"
-            assert (
-                con.choice_function
-                in Contest.SOCIAL_CHOICE_FUNCTION.SOCIAL_CHOICE_FUNCTIONS
-            ), f"unsupported choice function {con.choice_function} in contest {c}"
+            # assert (
+            #     con.choice_function in contest.SocialChoiceFunction.__subclasses__()
+            # ), f"unsupported choice function {con.choice_function} in contest {c}"  # TODO this assertion is not needed?
             assert con.n_winners <= len(
                 con.candidates
             ), f"more winners than candidates in contest {c}"
@@ -1962,7 +1961,7 @@ class Assertion:
         estim: callable = None,
         bet: callable = None,
     ):
-        """
+        r"""
         Construct assertion that winner got >= share_to_win \in (0,1) of the valid votes
 
         **TO DO: This method assumes there was a winner. To audit that there was no winner requires

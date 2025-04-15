@@ -27,8 +27,9 @@ class EProcess:
         Requires that the number of values to append is at least as long as the time series minus the start index
     """
     _values: np.ndarray = field(default_factory=lambda: np.array([0.0]))
-    # TODO: log scale or natural scale?
-    # TODO: constructor check that first value is 1 (natrual scale) or 0 (log scale)
+    running_max: float = field(default_factory=lambda: 0.0)
+    # TODO: log scale or linear scale?
+    # TODO: constructor check that first value is 1 (linear scale) or 0 (log scale)
 
     def __getitem__(self, item):
         try:
@@ -139,12 +140,39 @@ class NodeStatus(Enum):
 
 
 @dataclass
-class Node:
+class Node(ABC):
     id: str
     eprocess: EProcess = field(default_factory=lambda: EProcess())
+    parents: list['CompositeNode'] = None
+
+    def add_parent(self, parent: 'CompositeNode'):
+        if self.parents is None:
+            self.parents = []
+        self.parents.append(parent)
+
+    def remove_parent(self, parent: 'CompositeNode'):
+        if self.parents is not None:
+            self.parents.remove(parent)
+
+    # @abstractmethod
+    # def process_ballots(self, ballots: list) -> None:
+    #     """
+    #     Process the given ballots and update the eprocess
+    #     """
+    #     pass
+
+
+@dataclass
+class LeafNode(Node):
+    assort_and_test: callable = None
+
+    def __getitem__(self, item):
+        return self.eprocess[item]
+
+
+@dataclass
+class CompositeNode(Node):
     children: list['Node'] = None
-    parents: list['Node'] = None
-    status: NodeStatus = NodeStatus.ACTIVE
     combiner: Combiner = None
 
     def __getitem__(self, item):
@@ -179,6 +207,7 @@ class Node:
 @dataclass
 class NodeRegistry:
     nodes: dict[str, Node] = field(default_factory=lambda: {})
+    root: Node = None
 
     def __getitem__(self, item):
         if item in self.nodes:
@@ -190,11 +219,20 @@ class NodeRegistry:
     def __setitem__(self, key, value):
         self.nodes[key] = value
 
-    # n_processes: int = 0
-    # n_forgotten: int = 0
-    # children: list['EProcess'] = None
-    # operator: 'EProcessOperation' = None
+    def get_composite_node(self, ident):
+        if ident in self.nodes:
+            return self.nodes[ident]
+        else:
+            return CompositeNode(ident)
 
+    def get_leaf_node(self, ident):
+        if ident in self.nodes:
+            return self.nodes[ident]
+        else:
+            return LeafNode(ident)
+
+    def set_root(self, root: Node):
+        self.root = root
 
 # EProcessOperation = Callable[[list[EProcess]], EProcess]
 #
@@ -246,12 +284,12 @@ if __name__ == '__main__':
                                 13.4628123711735, 13.0952524984021, 13.9812479385424, 14.2584566889486,
                                 15.0316984784867]))
     reg = NodeRegistry()
-    reg['eproc1'] = Node('eproc1', eproc1)
-    reg['eproc2'] = Node('eproc2', eproc2)
-    reg['eproc3'] = Node('eproc3', eproc3)
-    reg['eproc4'] = Node('eproc4', eproc4)
-    reg['eproc5'] = Node('eproc5', eproc5)
-    reg['parent'] = Node('parent', combiner=Minimum())
+    reg['eproc1'] = LeafNode('eproc1', eproc1)
+    reg['eproc2'] = LeafNode('eproc2', eproc2)
+    reg['eproc3'] = LeafNode('eproc3', eproc3)
+    reg['eproc4'] = LeafNode('eproc4', eproc4)
+    reg['eproc5'] = LeafNode('eproc5', eproc5)
+    reg['parent'] = CompositeNode('parent', combiner=Minimum())
     reg['parent'].children = [reg['eproc1'], reg['eproc2'], reg['eproc3'], reg['eproc4'], reg['eproc5']]
     # print(reg['parent'][10])
     print("3:", reg['parent'][3])
@@ -263,7 +301,3 @@ if __name__ == '__main__':
     # print(x)
     pass
     # todo add tests
-
-
-# [0.         0.         1.11434841 2.47988864 4.26077053 4.26077053 3.82094559 3.99081967 3.99081967 3.99865728 5.72420566]
-# [0.         0.         1.11434841 2.47988864 4.26077053 4.26077053 3.82094559 3.99081967 5.38079695 5.38863457 7.11418294]
