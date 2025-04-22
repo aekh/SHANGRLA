@@ -14,8 +14,6 @@ from cryptorandom.cryptorandom import int_from_hash
 from cryptorandom.sample import random_permutation
 from cryptorandom.sample import sample_by_index
 
-from eprocess import Node
-
 from .NonnegMean import NonnegMean
 from .Audit import Audit
 
@@ -879,24 +877,24 @@ class CVR:
         return d
 
 
-@dataclass
-class Tabulation:
-    pass
-    # tabulation: list[dict[str, int]] = None
-    #
-    # def get_winners(self, n_winners: int = 1) -> list[str]:
-    #     """
-    #     Get the winners from the tabulation.
-    #     """
-    #     if self.tabulation is None:
-    #         raise ValueError("No tabulation available.")
-    #     winners = []
-    #     for t in self.tabulation:
-    #         if len(winners) < n_winners:
-    #             winners.append(t["candidate"])
-    #         else:
-    #             break
-    #     return winners
+# @dataclass
+# class Tabulation:
+#     pass
+#     # tabulation: list[dict[str, int]] = None
+#     #
+#     # def get_winners(self, n_winners: int = 1) -> list[str]:
+#     #     """
+#     #     Get the winners from the tabulation.
+#     #     """
+#     #     if self.tabulation is None:
+#     #         raise ValueError("No tabulation available.")
+#     #     winners = []
+#     #     for t in self.tabulation:
+#     #         if len(winners) < n_winners:
+#     #             winners.append(t["candidate"])
+#     #         else:
+#     #             break
+#     #     return winners
 
 
 @dataclass
@@ -925,28 +923,28 @@ class SocialChoiceFunction(ABC):
                ) -> float:
         pass
 
-    @abstractmethod
-    def get_winner_loser_pairs(self,
-                               winners: list[str],
-                               losers: list[str]
-                               ) -> Iterable[tuple[str, str, str, list[str], list[str]]]:
-        """
-        Get the winner-loser pairs for the social choice function.
-
-        Parameters
-        ----------
-        winners: list[str]
-            List of winners.
-        losers: list[str]
-            List of losers.
-
-        Returns
-        -------
-        Iterable[tuple[str, str, str, list[str], list[str]]]:
-            Iterable of tuples containing the name, winner, loser, winner_candidates, loser_candidates.
-            winner_/loser_candidates mean the set of candidates under consideration when evaluating the winner/loser
-        """
-        pass
+    # @abstractmethod
+    # def get_winner_loser_pairs(self,
+    #                            winners: list[str],
+    #                            losers: list[str]
+    #                            ) -> Iterable[tuple[str, str, str, list[str], list[str]]]:
+    #     """
+    #     Get the winner-loser pairs for the social choice function.
+    #
+    #     Parameters
+    #     ----------
+    #     winners: list[str]
+    #         List of winners.
+    #     losers: list[str]
+    #         List of losers.
+    #
+    #     Returns
+    #     -------
+    #     Iterable[tuple[str, str, str, list[str], list[str]]]:
+    #         Iterable of tuples containing the name, winner, loser, winner_candidates, loser_candidates.
+    #         winner_/loser_candidates mean the set of candidates under consideration when evaluating the winner/loser
+    #     """
+    #     pass
 
 
 class Plurality(SocialChoiceFunction):
