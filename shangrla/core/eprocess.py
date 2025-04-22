@@ -131,12 +131,12 @@ class Linear(Combiner):
         return logsumexp(increments + self.history[-1]) - logsumexp(self.history[-1])
 
 
-class NodeStatus(Enum):
-    ACTIVE = auto(),
-    PARKED = auto(),
-    ABANDONED = auto(),
-    REJECTED = auto(),
-    # PRUNED = auto()
+# class NodeStatus(Enum):
+#     ACTIVE = auto(),
+#     PARKED = auto(),
+#     ABANDONED = auto(),
+#     REJECTED = auto(),
+#     # PRUNED = auto()
 
 
 @dataclass
