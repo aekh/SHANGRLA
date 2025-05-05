@@ -30,12 +30,13 @@ class Assertion:
         winner: str = None,
         loser: str = None,
         margin: float = None,
-        test: object = None,
+        test: NonnegMean = None,
         estim: callable = None,
         bet: callable = None,
         test_kwargs: dict = {},
-        p_value: float = 1,
-        p_history: list = [],
+        node: eproc.Node = None,
+        # p_value: float = 1,
+        # p_history: list = [],
         proved: bool = False,
         sample_size: int = None,
         tally_pool_means: dict = None,
@@ -65,11 +66,10 @@ class Assertion:
         test: instance of class NonnegMean
             the function to find the p-value of the hypothesis that the assertion is true, i.e., that the
             assorter mean is <=1/2
-        p_value: float
-            the current p-value for the complementary null hypothesis that the assertion is false
-        p_history: list
-            the history of p-values, sample by sample. Generally, it is valid only for sequential risk-measuring
-            functions.
+        node: Node
+            contains the current p-value for the complementary null hypothesis that the assertion is false along with
+            the history of p-values, sample by sample.
+            Generally, using history is valid only for sequential risk-measuring functions.
         proved: boolean
             has the complementary null hypothesis been rejected?
         sample_size: int
@@ -83,12 +83,11 @@ class Assertion:
         self.loser = loser
         self.assorter = assorter
         self.margin = margin
-        self.test = test
+        self.test: NonnegMean = test
         self.estim = estim
         self.bet = bet
         self.test_kwargs = test_kwargs
-        self.p_value = p_value
-        self.p_history = p_history
+        self.node = node
         self.proved = proved
         self.sample_size = sample_size
         self.tally_pool_means = tally_pool_means
@@ -98,10 +97,10 @@ class Assertion:
     def __str__(self):
         return (
             f"contest_id: {self.contest.id} winner: {self.winner} loser: {self.loser} "
-            f"assorter: {str(self.assorter)} p-value: {self.p_value} "
+            f"assorter: {str(self.assorter)} p-value: {self.p_value()} "
             f"margin: {self.margin} test: {str(self.test)} estim: {str(self.estim)} bet: {str(self.bet)} "
             f"test_kwargs: {str(self.test_kwargs)} "
-            f"p-history length: {len(self.p_history)} proved: {self.proved} sample_size: {self.sample_size} "
+            f"p-history length: {len(self.node)} proved: {self.proved} sample_size: {self.sample_size} "
             f"assorter upper bound: {self.assorter.upper_bound} "
             f"proved:  {self.proved} "
             f"sample_size: {self.sample_size} "
@@ -117,20 +116,24 @@ class Assertion:
             "contest": self.contest.id,
             "winner": self.winner,
             "loser": self.loser,
-            "p_value": self.p_value,
+            "p_value": self.p_value(),
+            "min_p": self.min_p(),
             "margin": self.margin,
             "test": self.test,
             "estim": self.estim,
             "bet": self.bet,
             "test_kwargs": self.test_kwargs,
-            "p_history_length": len(self.p_history),
+            "history_length": len(self.node),
             "proved": self.proved,
             "sample_size": self.sample_size,
             "assorter_upper_bound": self.assorter.upper_bound,
         }
 
+    def p_value(self):
+        return self.node.get_p_value()
+
     def min_p(self):
-        return min(self.p_history)
+        return self.node.get_min_p_value()
 
     def margin(self, cvr_list: Collection = None, use_style: bool = True):
         """
@@ -268,6 +271,7 @@ class Assertion:
             raise NotImplementedError(
                 f"audit type {self.contest.audit_type} not supported"
             )
+        return self.margin
 
     def find_margin_from_tally(self, tally: dict = None):
         """
@@ -567,6 +571,57 @@ class Assertion:
         self.sample_size = sample_size
         return sample_size
 
+    def set_p_values(self, mvr_sample: list[CVR], cvr_sample: list[CVR] = None, use_all=False
+    ) -> float:
+        """
+        Find the p-value for every assertion and update assertions & contests accordingly
+
+        update p_value, p_history, proved flag, the maximum p-value for each contest.
+
+        Primarily about side-effects.
+
+        Parameters
+        ----------
+        contests: dict of dicts
+            the contest data structure. outer keys are contest identifiers; inner keys are assertions
+
+        mvr_sample: list of CVR objects
+            the manually ascertained voter intent from sheets, including entries for phantoms
+
+        cvr_sample: list of CVR objects
+            the cvrs for the same sheets, for ballot-level comparison audits
+            not needed for polling audits
+
+        Returns
+        -------
+        p_max: float
+            largest p-value for any assertion in any contest
+
+        Side-effects
+        ------------
+        Sets u for every test for every assertion, according to whether the corresponding audit method
+        is Audit.AUDIT_TYPE.CARD_COMPARISON, Audit.AUDIT_TYPE.ONEAUDIT, or Audit.AUDIT_TYPE.POLLING.
+        Sets contest max_p to be the largest P-value of any assertion for that contest
+        Updates p_value, p_history, and proved for every assertion
+
+        """
+        if cvr_sample is not None:
+            assert len(mvr_sample) == len(cvr_sample), "unequal numbers of cvrs and mvrs"
+        p_max = 0
+        d, u = self.mvrs_to_data(mvr_sample, cvr_sample, use_all=use_all)
+        self.test.u = u  # set upper bound for the test for each assorter
+
+        # TODO: make incremental
+        p_value, p_history = self.test.test(d)
+        self.node.eprocess.append_at(p_history, 0)
+        # asn.proved = (asn.p_value <= con.risk_limit) or asn.proved
+        # con.p_values.update({a: asn.p_value})
+        # con.proved.update({a: asn.proved})
+        # contest_max_p = np.max([contest_max_p, asn.p_value])
+        # contests[c].max_p = contest_max_p
+        # p_max = np.max([p_max, contests[c].max_p])
+        return p_value
+
     @classmethod
     def interleave_values(
         cls,
@@ -620,119 +675,6 @@ class Assertion:
                 i_big += 1
                 r_big = (n_big - i_big) / n_big
         return x
-
-    @classmethod
-    def set_all_margins_from_cvrs(
-        cls,
-        audit: object = None,
-        contests: dict = None,
-        cvr_list: Collection['CVR'] = None,
-    ):
-        """
-        Find all the assorter margins in a set of Assertions. Updates the dict of dicts of assertions
-        and the contest dict.
-
-        Appropriate only if cvrs are available. Otherwise, base margins on the reported results.
-
-        This function is primarily about side-effects on the assertions in the contest dict.
-
-        Parameters
-        ----------
-        audit: Audit
-            information about the audit
-        contests: dict of Contest objects
-        cvr_list: Collection
-            collection of CVR objects
-
-        Returns
-        -------
-        min_margin: float
-            smallest margin in the audit
-
-        Side effects
-        ------------
-        sets the margin of every assertion
-        sets the assertion.test.u for every assertion, according to whether
-           `assertion.contest.audit_type==Audit.AUDIT_TYPE.POLLING`
-           or `assertion.contest.audit_type in [Audit.AUDIT_TYPE.CARD_COMPARISON, Audit.AUDIT_TYPE.ONEAUDIT]`
-        """
-        min_margin = np.inf
-        for c, con in contests.items():
-            con.margins = {}
-            asn.set_margin_from_cvrs(audit, cvr_list)
-            for a, asn in con.assertions.items():
-                asn.set_margin_from_cvrs(audit, cvr_list)
-                margin = asn.margin
-                con.margins.update({a: margin})
-                if con.audit_type == Audit.AUDIT_TYPE.POLLING:
-                    u = asn.assorter.upper_bound
-                elif con.audit_type in [
-                    Audit.AUDIT_TYPE.CARD_COMPARISON,
-                    Audit.AUDIT_TYPE.ONEAUDIT,
-                ]:
-                    u = 2 / (2 - margin / asn.assorter.upper_bound)
-                else:
-                    raise NotImplementedError(
-                        f"audit type {con.audit_type} not implemented"
-                    )
-                asn.test.u = u
-                min_margin = min(min_margin, margin)
-        return min_margin
-
-    @classmethod
-    def set_p_values(
-        cls, contests: dict, mvr_sample: list, cvr_sample: list = None, use_all=False
-    ) -> float:
-        """
-        Find the p-value for every assertion and update assertions & contests accordingly
-
-        update p_value, p_history, proved flag, the maximum p-value for each contest.
-
-        Primarily about side-effects.
-
-        Parameters
-        ----------
-        contests: dict of dicts
-            the contest data structure. outer keys are contest identifiers; inner keys are assertions
-
-        mvr_sample: list of CVR objects
-            the manually ascertained voter intent from sheets, including entries for phantoms
-
-        cvr_sample: list of CVR objects
-            the cvrs for the same sheets, for ballot-level comparison audits
-            not needed for polling audits
-
-        Returns
-        -------
-        p_max: float
-            largest p-value for any assertion in any contest
-
-        Side-effects
-        ------------
-        Sets u for every test for every assertion, according to whether the corresponding audit method
-        is Audit.AUDIT_TYPE.CARD_COMPARISON, Audit.AUDIT_TYPE.ONEAUDIT, or Audit.AUDIT_TYPE.POLLING.
-        Sets contest max_p to be the largest P-value of any assertion for that contest
-        Updates p_value, p_history, and proved for every assertion
-
-        """
-        if cvr_sample is not None:
-            assert len(mvr_sample) == len(cvr_sample), "unequal numbers of cvrs and mvrs"
-        p_max = 0
-        for c, con in contests.items():
-            con.p_values = {}
-            con.proved = {}
-            contest_max_p = 0
-            for a, asn in con.assertions.items():
-                d, u = asn.mvrs_to_data(mvr_sample, cvr_sample, use_all=use_all)
-                asn.test.u = u  # set upper bound for the test for each assorter
-                asn.p_value, asn.p_history = asn.test.test(d)
-                asn.proved = (asn.p_value <= con.risk_limit) or asn.proved
-                con.p_values.update({a: asn.p_value})
-                con.proved.update({a: asn.proved})
-                contest_max_p = np.max([contest_max_p, asn.p_value])
-            contests[c].max_p = contest_max_p
-            p_max = np.max([p_max, contests[c].max_p])
-        return p_max
 
     @classmethod
     def reset_p_values(cls, contests: dict) -> bool:
@@ -799,7 +741,8 @@ class AssertionHandler:
         self.bet = contest.bet
         self.params = self.validate_params(**kwargs)
 
-        self.registry = NodeRegistry()
+        self.registry: NodeRegistry = NodeRegistry()
+        self.assertions: dict[str, Assertion] = {}
 
         #self.root = self.registry.get_composite_node("root")
         # self.status =
@@ -808,7 +751,7 @@ class AssertionHandler:
 
         self.build_assertion_handler()
 
-    def make_assertion(self, winner, loser, winner_cands, loser_cands):
+    def make_assertion(self, node, winner, loser, winner_cands, loser_cands, id=None):
         _test = NonnegMean(
             test=self.test,
             estim=self.estim,
@@ -823,114 +766,136 @@ class AssertionHandler:
             contest=self.contest,
             assort=self.contest.make_assort_function(winner=winner, loser=loser, winner_cands=winner_cands, loser_cands=loser_cands),
             upper_bound=self.ub)
-        return Assertion(
+        assertion = Assertion(
             self.contest,
             winner=winner,
             loser=loser,
+            node=node,
             assorter=_assorter,
             test=_test,
             estim=self.estim,
             bet=self.bet,
             test_kwargs=self.test_kwargs
         )
-
-    def make_assertions_from_json(
-        self,
-        contest: Contest = None,
-        candidates: list = None,
-        json_assertions: dict = None,
-        test: callable = None,
-        test_kwargs: dict = {},
-        estim: callable = None,
-        bet: callable = None,
-    ):
-        """
-        dict of Assertion objects from a RAIRE-style json representations of assertions.
-
-        The assertion_type for each assertion must be one of the JSON_ASSERTION_TYPES
-        (class constants).
-
-        Parameters
-        ----------
-        contest: Contest instance
-            contest to which the assorter applies
-        candidates:
-            list of identifiers for all candidates in relevant contest.
-        json_assertions:
-            Assertions to be tested for the relevant contest.
-        test: instance of NonnegMean
-            risk function for the contest
-        test_kwargs: dict
-            kwargs for the test
-        estim: an estimation method of NonnegMean
-            estimator the test uses for the alternative
-
-        Returns
-        -------
-        dict of assertions for each assertion specified in 'json_assertions'.
-        """
-        ub = self.scf.assort_upper_bound()
-        assertions = {}
-        for assrtn in json_assertions:
-            winr = assrtn["winner"]
-            losr = assrtn["loser"]
-            # _test = NonnegMean(
-            #     test=test,
-            #     estim=estim,
-            #     bet=bet,
-            #     u=1,
-            #     N=contest.cards,
-            #     t=1 / 2,
-            #     random_order=True,
-            #     **test_kwargs
-            # )
-            if assrtn["assertion_type"] == cls.WINNER_ONLY:
-                winner_cands = list(contest.candidates)
-                loser_cands = [winr, losr]  # TODO not identical to the winner_only setup
-                assrtn_id = winr + " v " + losr
-                # winner_func = lambda v, contest_id=contest.id, winr=winr: (
-                #     1 if v.get_vote_for(contest_id, winr) == 1 else 0
-                # )
-                #
-                # # CVR is a vote for the loser if they appear and the
-                # # winner does not, or they appear before the winner
-                # loser_func = lambda v, contest_id=contest.id, winr=winr, losr=losr: v.rcv_lfunc_wo(
-                #     contest_id, winr, losr
-                # )
-                # _assort_func = lambda v, winner_func=winner_func, loser_func=loser_func: (winner_func(v) - loser_func(v) + 1)/2
-            elif assrtn["assertion_type"] == cls.IRV_ELIMINATION:
-                # Context is that all candidates in 'eliminated' have been
-                # eliminated and their votes distributed to later preferences
-                elim = [e for e in assrtn["already_eliminated"]]
-                remn = [c for c in candidates if c not in elim]
-                winner_cands = remn
-                loser_cands = remn
-                # # Identifier for tracking which assertions have been proved
-                assrtn_id = winr + " v " + losr + " elim " + " ".join(elim)
-                # _assort_func = lambda v, contest_id=contest.id, winner=winr, loser=losr, remn=remn: (v.rcv_votefor_cand(contest.id, winr, remn)
-                #                           - v.rcv_votefor_cand(contest.id, losr, remn) + 1) / 2
-            else:
-                raise NotImplemented(
-                    f'JSON assertion type {assrtn["assertion_type"]} not implemented.'
-                )
-            assertions[assrtn_id] = self.make_assertion(ub, winr, losr, winner_cands, loser_cands)
-            # _assort = Assorter(
-            #     contest=contest,
-            #     # assort=_assort_func,
-            #     assort=contest.make_assort_function(winr, losr, winner_cands, loser_cands),
-            #     upper_bound=1
-            # )
-            # assertions[assrtn_id] = Assertion(
-            #     contest,
-            #     _assort,
-            #     winner=winr,
-            #     loser=losr,
-            #     test=_test,
-            # )
-        return assertions
+        key_error_extra = ""
+        if id is None:
+            id = f"{winner} v {loser}"
+            key_error_extra = " (default id used)"
+        if id in self.assertions:
+            raise KeyError(f"Assertion {id} already exists{key_error_extra}")
+        self.assertions[id] = assertion
 
     def build_assertion_handler(self):
         get_assertion_builder(self.scf)(self, self.winners, self.losers)
+
+    def set_all_margins_from_cvrs(  # TODO this should be called by Audit class looping over contests
+        self,
+        audit: Audit = None,
+        # contests: dict = None,
+        cvr_list: Collection[CVR] = None,
+    ):
+        """
+        Find all the assorter margins in a set of Assertions. Updates the dict of dicts of assertions
+        and the contest dict.
+
+        Appropriate only if cvrs are available. Otherwise, base margins on the reported results.
+
+        This function is primarily about side-effects on the assertions in the contest dict.
+
+        Parameters
+        ----------
+        audit: Audit
+            information about the audit
+        contests: dict of Contest objects
+        cvr_list: Collection
+            collection of CVR objects
+
+        Returns
+        -------
+        min_margin: float
+            smallest margin in the audit
+
+        Side effects
+        ------------
+        sets the margin of every assertion
+        sets the assertion.test.u for every assertion, according to whether
+           `assertion.contest.audit_type==Audit.AUDIT_TYPE.POLLING`
+           or `assertion.contest.audit_type in [Audit.AUDIT_TYPE.CARD_COMPARISON, Audit.AUDIT_TYPE.ONEAUDIT]`
+        """
+        min_margin = np.inf
+        for a, asrt in self.assertions.items():
+            margin = asrt.set_margin_from_cvrs(audit, cvr_list)
+            min_margin = np.min([min_margin, margin])
+        return min_margin
+
+    def set_p_values(self, mvr_sample: list, cvr_sample: list = None, use_all=False) -> float:  # TODO Create audit-wide corresponding function
+        """
+        Find the p-value for every assertion and update assertions & contests accordingly
+
+        update p_value, p_history, proved flag, the maximum p-value for each contest.
+
+        Primarily about side-effects.
+
+        Parameters
+        ----------
+        contests: dict of dicts
+            the contest data structure. outer keys are contest identifiers; inner keys are assertions
+
+        mvr_sample: list of CVR objects
+            the manually ascertained voter intent from sheets, including entries for phantoms
+
+        cvr_sample: list of CVR objects
+            the cvrs for the same sheets, for ballot-level comparison audits
+            not needed for polling audits
+
+        Returns
+        -------
+        p_max: float
+            largest p-value for any assertion in any contest
+
+        Side-effects
+        ------------
+        Sets u for every test for every assertion, according to whether the corresponding audit method
+        is Audit.AUDIT_TYPE.CARD_COMPARISON, Audit.AUDIT_TYPE.ONEAUDIT, or Audit.AUDIT_TYPE.POLLING.
+        Sets contest max_p to be the largest P-value of any assertion for that contest
+        Updates p_value, p_history, and proved for every assertion
+
+        """
+        if cvr_sample is not None:
+            assert len(mvr_sample) == len(cvr_sample), "unequal numbers of cvrs and mvrs"
+        p_max = 0
+        self.contest.p_values = {}
+        self.contest.proved = {}
+        contest_max_p = 0
+        for a, asrt in self.assertions.items():
+            asrt.set_p_values(mvr_sample, cvr_sample, use_all=use_all)
+
+            # d, u = asrt.mvrs_to_data(mvr_sample, cvr_sample, use_all=use_all)
+            # asrt.test.u = u  # set upper bound for the test for each assorter
+            # asrt.p_value, asrt.p_history = asrt.test.test(d)
+            # asrt.proved = (asrt.p_value <= self.contest.risk_limit) or asrt.proved
+            # self.contest.p_values.update({a: asrt.p_value})
+            # self.contest.proved.update({a: asrt.proved})
+            # contest_max_p = np.max([contest_max_p, asrt.p_value])
+            # self.contest.max_p = contest_max_p
+            # p_max = np.max([p_max, self.contest.max_p])
+        return p_max
+
+    def reset_p_values(cls, contests: dict) -> bool:
+        '''
+        Resets the p-values, p_history, and proved for every assertion
+        '''
+        for c, con in contests.items():
+            con.p_values = {}
+            con.proved = {}
+            for a, asn in con.assertions.items():
+                asn.p_value, asn.p_history = 1, []
+                asn.proved = False
+                con.p_values.update({a: asn.p_value})
+                con.proved.update({a: asn.proved})
+            contests[c].max_p = 1
+        return True
+
 
     @staticmethod
     def validate_params(**kwargs) -> dict:
@@ -1246,7 +1211,7 @@ def get_assertion_builder(scf: scc.SocialChoiceFunction) -> AssertionBuilder:
 @link_with_scf(scc.Plurality)
 def plurality_builder(handler: AssertionHandler, winners: list[str], losers: list[str]) -> None:
     reg = NodeRegistry()
-    root = reg.get_composite_node("root")
+    root = reg.get_composite_node("root", logic=eproc.CompositeLogic.AND)
     root.combiner = eproc.Minimum()
     reg.set_root(root)
     cands = list(handler.candidates)
@@ -1254,8 +1219,8 @@ def plurality_builder(handler: AssertionHandler, winners: list[str], losers: lis
         for loser in losers:
             wl_pair = winner + " v " + loser
             node = reg.get_leaf_node(wl_pair)
-            node.add_parent(root)
-            node.assort_and_test = handler.make_assertion(winner, loser, cands, cands)
+            root.add_child(node)
+            handler.make_assertion(node, winner, loser, cands, cands, id=wl_pair)
     handler.registry = reg
 
 
@@ -1306,7 +1271,7 @@ def threshold_builder(handler: AssertionHandler, winners: list[str], losers: lis
 
     """
     reg = NodeRegistry()
-    root = reg.get_composite_node("root")
+    root = reg.get_composite_node("root", logic=eproc.CompositeLogic.AND)
     root.combiner = eproc.Minimum()
     reg.set_root(root)
     loser = Contest.CANDIDATES.ALL_OTHERS
@@ -1314,20 +1279,21 @@ def threshold_builder(handler: AssertionHandler, winners: list[str], losers: lis
     for winner in winners:
         wl_pair = winner + " v " + Contest.CANDIDATES.ALL_OTHERS
         node = reg.get_leaf_node(wl_pair)
-        node.add_parent(root)
-        node.assort_and_test = handler.make_assertion(winner, loser, cands, cands)
+        root.add_child(node)
+        handler.make_assertion(node, winner, loser, cands, cands, id=wl_pair)
     handler.registry = reg
 
 
 @link_with_scf(scc.InstantRunoff)
 def instant_runoff_builder(handler: AssertionHandler, winners: list[str], losers: list[str]) -> None:
     reg = NodeRegistry()
-    root = reg.get_composite_node("root")
+    root = reg.get_composite_node("root", logic=eproc.CompositeLogic.AND)
     root.combiner = eproc.Minimum()
     reg.set_root(root)
     # loser = Contest.CANDIDATES.ALL_OTHERS
     # cands = list(handler.candidates)
     if 'assertion_json' in dir(handler.contest):  # TODO this is ugly
+        # RAIRE style
         for assrtn in handler.contest.assertion_json:
             winner = assrtn["winner"]
             loser = assrtn["loser"]
@@ -1349,8 +1315,10 @@ def instant_runoff_builder(handler: AssertionHandler, winners: list[str], losers
                     f'JSON assertion type {assrtn["assertion_type"]} not implemented.'
                 )
             node = reg.get_leaf_node(assrtn_id)
-            node.add_parent(root)
-            node.assort_and_test = handler.make_assertion(winner, loser, winner_cands, loser_cands)
+            root.add_child(node)
+            handler.make_assertion(node, winner, loser, winner_cands, loser_cands, id=assrtn_id)
+            # node.assort_and_test = handler.make_assertion(winner, loser, winner_cands, loser_cands)
+            # node.assertion = handler.make_assertion(winner, loser, winner_cands, loser_cands)
     else:
         pass
 

@@ -158,21 +158,25 @@ audit.check_audit_parameters(cons)
 
 # Calculate margins for each assertion.
 cvr_list = CVR.from_dict(cvr_input)
-min_margin = Assertion.set_all_margins_from_cvrs(audit, cons, cvr_list)
-hardest_assertion_name, hardest_assertion = min(cons['1'].assertions.items(), key=lambda x: x[1].margin)
+min_margin = cons['1'].assertions.set_all_margins_from_cvrs(audit, cvr_list)
+# min_margin = Assertion.set_all_margins_from_cvrs(audit, cons, cvr_list)
+# hardest_assertion_name, hardest_assertion = min(cons['1'].assertions.items(), key=lambda x: x[1].margin)
+#
+# # Hack, set attributes for tests and estims
+# for contest in cons.values():
+#     for assertion in contest.assertions.values():
+#         assertion.test.error_rate_2 = 1e-5
+#
+# # Calculate all the p-values.
+cons['1'].assertions.set_p_values(cvr_list, cvr_list, use_all=True)
+# Assertion.set_p_values(cons, cvr_list, cvr_list, use_all=True)
+#pvalues = merge_pvalues(cons['1'].assertions.assertions)
+cons['1'].assertions.registry.root[200]
+pvalues = cons['1'].assertions.registry.root.eprocess._values
+# overstatements = np.array([cons['1'].assertions.registry.root.overstatement(cvr_list[i], cvr_list[i]) * 2
+#                            for i in range(len(cvr_list))])
 
-# Hack, set attributes for tests and estims
-for contest in cons.values():
-    for assertion in contest.assertions.values():
-        assertion.test.error_rate_2 = 1e-5
-
-# Calculate all the p-values.
-Assertion.set_p_values(cons, cvr_list, cvr_list, use_all=True)
-pvalues = merge_pvalues(cons['1'].assertions)
-overstatements = np.array([hardest_assertion.assorter.overstatement(cvr_list[i], cvr_list[i]) * 2
-                           for i in range(len(cvr_list))])
-
-samplesize_5pct, certified_5pct, counts_5pc = get_samplesize_and_overstatements(overstatements,
+samplesize_5pct, certified_5pct, counts_5pc = get_samplesize_and_overstatements([],
                                                                                 pvalues,
                                                                                 0.05)
 

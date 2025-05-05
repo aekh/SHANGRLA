@@ -5,6 +5,8 @@ from typing import Callable
 import numpy as np
 from scipy.special import logsumexp
 
+from shangrla.core.Audit import Audit
+
 
 @dataclass
 class EProcess:
@@ -145,14 +147,34 @@ class Node(ABC):
     eprocess: EProcess = field(default_factory=lambda: EProcess())
     parents: list['CompositeNode'] = None
 
-    def add_parent(self, parent: 'CompositeNode'):
+    def _add_parent(self, parent: 'CompositeNode'):
         if self.parents is None:
             self.parents = []
         self.parents.append(parent)
 
-    def remove_parent(self, parent: 'CompositeNode'):
+    def _remove_parent(self, parent: 'CompositeNode'):
         if self.parents is not None:
             self.parents.remove(parent)
+
+    def get_p_value(self):
+        return 1/np.exp(self.eprocess[-1])
+
+    def get_min_p_value(self):
+        return 1/np.exp(self.eprocess.running_max)
+
+    def __len__(self):
+        return len(self.eprocess)
+
+    @abstractmethod
+    def __getitem__(self, item):
+        pass
+
+    # @abstractmethod
+    # def set_margin_from_cvrs(self, audit: Audit, cvrs: list) -> None:
+    #     """
+    #     Sets the margin of the node from the CVRs
+    #     """
+    #     pass
 
     # @abstractmethod
     # def process_ballots(self, ballots: list) -> None:
@@ -164,21 +186,32 @@ class Node(ABC):
 
 @dataclass
 class LeafNode(Node):
-    assort_and_test: callable = None
-
     def __getitem__(self, item):
         return self.eprocess[item]
 
 
+class CompositeLogic(Enum):
+    AND = auto()
+    OR = auto()
+
+
 @dataclass
 class CompositeNode(Node):
-    children: list['Node'] = None
-    combiner: Combiner = None
+    children: list[Node] = None
+    logic: CompositeLogic = CompositeLogic.AND
+    combiner: Combiner = Minimum()
+    margin: float = None
 
     def __getitem__(self, item):
         if item >= len(self.eprocess):
             self.combine(start=len(self.eprocess), end=item+1)
         return self.eprocess[item]
+
+    def add_child(self, child: Node):
+        if self.children is None:
+            self.children = []
+        self.children.append(child)
+        child._add_parent(self)
 
     def combine(self, start: int = 0, end: int = -1) -> None:
         """
@@ -203,11 +236,26 @@ class CompositeNode(Node):
         values = np.cumsum(increments) + self.eprocess[start-1]
         self.eprocess.append_at(values, start)
 
+    # def set_margin_from_cvrs(self, audit: Audit, cvrs: list):
+    #     """
+    #     Sets the margin of the composite node from the CVRs of the children
+    #     """
+    #     for child in self.children:
+    #         child.set_margin_from_cvrs(audit, cvrs)
+    #
+    #     if self.logic == CompositeLogic.AND:
+    #         self.margin = min([child.eprocess.running_max for child in self.children])
+    #     elif self.logic == CompositeLogic.OR:
+    #         self.margin = max([child.eprocess.running_max for child in self.children])
+    #     else:
+    #         raise ValueError(f"Unknown composite logic {self.logic}")
 
-@dataclass
+
+# @dataclass
 class NodeRegistry:
-    nodes: dict[str, Node] = field(default_factory=lambda: {})
-    root: Node = None
+    def __init__(self):
+        self.nodes = dict()
+        self.root = CompositeNode('root', logic=CompositeLogic.AND, combiner=Minimum())
 
     def __getitem__(self, item):
         if item in self.nodes:
@@ -219,17 +267,28 @@ class NodeRegistry:
     def __setitem__(self, key, value):
         self.nodes[key] = value
 
-    def get_composite_node(self, ident):
+    def get_composite_node(self, ident, logic: CompositeLogic):
         if ident in self.nodes:
-            return self.nodes[ident]
+            if isinstance(self.nodes[ident], CompositeNode):
+                if self.nodes[ident].logic == logic:
+                    return self.nodes[ident]
+                else:
+                    raise ValueError(f"Node {ident} already exists with different logic {self.nodes[ident].logic}")
+            else:
+                raise ValueError(f"Node {ident} already exists as a leaf node")
         else:
-            return CompositeNode(ident)
+            self.nodes[ident] = CompositeNode(ident, logic=logic)
+            return self.nodes[ident]
 
     def get_leaf_node(self, ident):
         if ident in self.nodes:
-            return self.nodes[ident]
+            if isinstance(self.nodes[ident], LeafNode):
+                return self.nodes[ident]
+            else:
+                raise ValueError(f"Node {ident} already exists as a composite node")
         else:
-            return LeafNode(ident)
+            self.nodes[ident] = LeafNode(ident)
+            return self.nodes[ident]
 
     def set_root(self, root: Node):
         self.root = root
