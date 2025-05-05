@@ -2,7 +2,7 @@ import numpy as np
 
 # Make sure shangrla is in your PYTHONPATH
 from shangrla.core.NonnegMean import NonnegMean
-from shangrla.core.Audit import Assertion
+from shangrla.core.assertion import Assertion
 
 
 def sample_size(mean, tw, tl, to, args, N, upper_bound=1, polling=False):
