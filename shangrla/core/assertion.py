@@ -3,10 +3,10 @@ import math
 import warnings
 from collections.abc import Collection
 from typing import Type, Callable
-
 import numpy as np
-from shangrla.core.NonnegMean import NonnegMean
+from itertools import permutations
 
+from shangrla.core.NonnegMean import NonnegMean
 from shangrla.core.Audit import Stratum, NpEncoder, Audit
 from shangrla.core.contest import CVR, Contest
 import shangrla.core.contest as scc
@@ -612,15 +612,20 @@ class Assertion:
         self.test.u = u  # set upper bound for the test for each assorter
 
         # TODO: make incremental
-        p_value, p_history = self.test.test(d)
-        self.node.eprocess.append_at(p_history, 0)
+        e_value, e_history = self.test.test(d)  # NOTE: alpha mart is changed to return e-values
+
+        # transform to log scale
+        e_value = np.log(e_value)
+        e_history = np.log(e_history)
+
+        self.node.eprocess.append_at(e_history, 0)
         # asn.proved = (asn.p_value <= con.risk_limit) or asn.proved
         # con.p_values.update({a: asn.p_value})
         # con.proved.update({a: asn.proved})
         # contest_max_p = np.max([contest_max_p, asn.p_value])
         # contests[c].max_p = contest_max_p
         # p_max = np.max([p_max, contests[c].max_p])
-        return p_value
+        return e_value
 
     @classmethod
     def interleave_values(
@@ -1290,9 +1295,7 @@ def instant_runoff_builder(handler: AssertionHandler, winners: list[str], losers
     root = reg.get_composite_node("root", logic=eproc.CompositeLogic.AND)
     root.combiner = eproc.Minimum()
     reg.set_root(root)
-    # loser = Contest.CANDIDATES.ALL_OTHERS
-    # cands = list(handler.candidates)
-    if 'assertion_json' in dir(handler.contest):  # TODO this is ugly
+    if 'assertion_json' in dir(handler.contest):  # Check if assertion_json is provided. TODO this is ugly
         # RAIRE style
         for assrtn in handler.contest.assertion_json:
             winner = assrtn["winner"]
@@ -1317,9 +1320,27 @@ def instant_runoff_builder(handler: AssertionHandler, winners: list[str], losers
             node = reg.get_leaf_node(assrtn_id)
             root.add_child(node)
             handler.make_assertion(node, winner, loser, winner_cands, loser_cands, id=assrtn_id)
-            # node.assort_and_test = handler.make_assertion(winner, loser, winner_cands, loser_cands)
-            # node.assertion = handler.make_assertion(winner, loser, winner_cands, loser_cands)
     else:
-        pass
-
+        cands = handler.candidates  # TODO use winners+losers ?
+        altorders = permutations(cands)  # representation is [..., 3rd place, runner-up, winner]
+        for altorder in altorders:
+            if altorder[-1] in winners:  # TODO only supports one winner, throw exception somewhere
+                continue  # skip non-altorders
+            node = reg.get_composite_node(str(altorder), logic=eproc.CompositeLogic.OR)
+            node.combiner = eproc.Linear()
+            root.add_child(node)
+            for i, newc in enumerate(altorder):
+                remaining = frozenset(altorder[i:])
+                eliminated = frozenset(altorder) - remaining
+                for remc in remaining - {newc}:  # all candidates remaining after newc is eliminated
+                    req_name = f"{remc} DB {newc}, {remaining} remaining"
+                    requirement = reg.get_leaf_node(req_name)
+                    node.add_child(requirement)
+                    handler.make_assertion(requirement, remc, newc, remaining, remaining, id=req_name)
+                # for elimc in eliminated:
+                #     req_name = f"{elimc} DND {newc}, {remaining} remaining"
+                #     requirement = req.get_leaf_node(req_name)
+                #     node.add_child(requirement)
+                #     handler.make_assertion(requirement, elimc, newc, eliminated, remaining, id=req_name)
+                # reqs += [ReqIdent("DND", first=other, second=newc) for other in eliminated]
     handler.registry = reg
