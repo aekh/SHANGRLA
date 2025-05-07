@@ -138,7 +138,8 @@ class NonnegMean:
         terms[-1] = (
             np.inf if Stot > N * t else terms[-1]
         )  # final sample makes the total greater than the null
-        return min(1, 1 / np.max(terms)), np.minimum(1, 1 / terms)
+        # return min(1, 1 / np.max(terms)), np.minimum(1, 1 / terms)
+        return max(0, np.max(terms)), np.maximum(0, terms)
 
     def sjm(self, N: int, t: float, x: np.array) -> tuple[np.array, float, np.array, np.array]:
         """
