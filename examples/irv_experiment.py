@@ -172,7 +172,7 @@ cons['1'].assertions.set_p_values(cvr_list, cvr_list, use_all=True)
 # Assertion.set_p_values(cons, cvr_list, cvr_list, use_all=True)
 #pvalues = merge_pvalues(cons['1'].assertions.assertions)
 cons['1'].assertions.registry.root[200]
-pvalues = cons['1'].assertions.registry.root.eprocess._values
+pvalues = cons['1'].assertions.registry.root.eprocess.p_history()
 # overstatements = np.array([cons['1'].assertions.registry.root.overstatement(cvr_list[i], cvr_list[i]) * 2
 #                            for i in range(len(cvr_list))])
 
