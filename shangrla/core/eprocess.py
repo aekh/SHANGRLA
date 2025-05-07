@@ -53,8 +53,23 @@ class EProcess:
         self._values[start:] = values[:len(self._values) - start]
         self.append(values[len(self._values) - start:])
 
-    def pvalue(self):
-        pass
+    def p_history(self):
+        """
+        Returns the history of p-values for the process
+        """
+        return 1/np.exp(self._values)
+
+    def p_value(self):
+        """
+        Returns the latest p-value for the process
+        """
+        return 1/np.exp(self._values[-1])
+
+    def min_p_value(self):
+        """
+        Returns the running minimum p-value for the process
+        """
+        return 1/np.exp(self.running_max)
 
 
 class Combiner(ABC):
