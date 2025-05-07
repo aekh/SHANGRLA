@@ -120,9 +120,9 @@ audit = Audit.from_dict({
     })
 
 # create contest object
-datafile = "/Users/aekk0001/Documents/PPR-Audits/datafiles/NSW2015/Data_NA_Albury.txt_ballots.txt"
-margin = "/Users/aekk0001/Documents/PPR-Audits/datafiles/margins/NSW2015/Data_NA_Albury.txt_ballots.csv"
-orderings = "/Users/aekk0001/Documents/PPR-Audits/datafiles/orderings/NSW2015/Data_NA_Albury.txt_ballots.csv"
+datafile = "data/albury-ballots.txt"
+margin = "data/albury-margins.csv"
+orderings = "data/albury-orderings.csv"
 
 ncand, winner, pop_size, margin, orderdata, data = read_election_files(datafile, margin, orderings)
 
