@@ -217,8 +217,11 @@ class CompositeNode(Node):
     combiner: Combiner = Minimum()
     margin: float = None
 
-    def __getitem__(self, item):
-        if item >= len(self.eprocess):
+    def __getitem__(self, item: int | slice):
+        if isinstance(item, slice):
+            if item.stop >= len(self.eprocess):
+                self.combine(start=len(self.eprocess), end=item.stop)
+        elif item >= len(self.eprocess):
             self.combine(start=len(self.eprocess), end=item+1)
         return self.eprocess[item]
 
@@ -236,7 +239,7 @@ class CompositeNode(Node):
         hist_len = start - hist_start
 
         # collate the values of the children processes
-        transposed = np.stack([child.eprocess[hist_start:end] for child in self.children], axis=1)
+        transposed = np.stack([child[hist_start:end] for child in self.children], axis=1)
 
         # set the history of the combiner
         self.combiner.set_history(transposed[:hist_len])
@@ -295,15 +298,15 @@ class NodeRegistry:
             self.nodes[ident] = CompositeNode(ident, logic=logic)
             return self.nodes[ident]
 
-    def get_leaf_node(self, ident):
+    def get_leaf_node(self, ident) -> tuple[Node, bool]:
         if ident in self.nodes:
             if isinstance(self.nodes[ident], LeafNode):
-                return self.nodes[ident]
+                return self.nodes[ident], False
             else:
                 raise ValueError(f"Node {ident} already exists as a composite node")
         else:
             self.nodes[ident] = LeafNode(ident)
-            return self.nodes[ident]
+            return self.nodes[ident], True
 
     def set_root(self, root: Node):
         self.root = root

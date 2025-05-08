@@ -1223,7 +1223,7 @@ def plurality_builder(handler: AssertionHandler, winners: list[str], losers: lis
     for winner in winners:
         for loser in losers:
             wl_pair = winner + " v " + loser
-            node = reg.get_leaf_node(wl_pair)
+            node, _ = reg.get_leaf_node(wl_pair)
             root.add_child(node)
             handler.make_assertion(node, winner, loser, cands, cands, id=wl_pair)
     handler.registry = reg
@@ -1283,7 +1283,7 @@ def threshold_builder(handler: AssertionHandler, winners: list[str], losers: lis
     cands = list(handler.candidates)
     for winner in winners:
         wl_pair = winner + " v " + Contest.CANDIDATES.ALL_OTHERS
-        node = reg.get_leaf_node(wl_pair)
+        node, _ = reg.get_leaf_node(wl_pair)
         root.add_child(node)
         handler.make_assertion(node, winner, loser, cands, cands, id=wl_pair)
     handler.registry = reg
@@ -1317,7 +1317,7 @@ def instant_runoff_builder(handler: AssertionHandler, winners: list[str], losers
                 raise NotImplemented(
                     f'JSON assertion type {assrtn["assertion_type"]} not implemented.'
                 )
-            node = reg.get_leaf_node(assrtn_id)
+            node, _ = reg.get_leaf_node(assrtn_id)
             root.add_child(node)
             handler.make_assertion(node, winner, loser, winner_cands, loser_cands, id=assrtn_id)
     else:
@@ -1334,13 +1334,15 @@ def instant_runoff_builder(handler: AssertionHandler, winners: list[str], losers
                 eliminated = frozenset(altorder) - remaining
                 for remc in remaining - {newc}:  # all candidates remaining after newc is eliminated
                     req_name = f"{remc} DB {newc}, {remaining} remaining"
-                    requirement = reg.get_leaf_node(req_name)
+                    requirement, is_new = reg.get_leaf_node(req_name)
                     node.add_child(requirement)
-                    handler.make_assertion(requirement, remc, newc, remaining, remaining, id=req_name)
-                # for elimc in eliminated:
-                #     req_name = f"{elimc} DND {newc}, {remaining} remaining"
-                #     requirement = req.get_leaf_node(req_name)
-                #     node.add_child(requirement)
-                #     handler.make_assertion(requirement, elimc, newc, eliminated, remaining, id=req_name)
+                    if is_new:
+                        handler.make_assertion(requirement, remc, newc, remaining, remaining, id=req_name)
+                for elimc in eliminated:
+                    req_name = f"{elimc} DND {newc}"
+                    requirement, is_new = reg.get_leaf_node(req_name)
+                    node.add_child(requirement)
+                    if is_new:
+                        handler.make_assertion(requirement, elimc, newc, cands, [newc, elimc], id=req_name)
                 # reqs += [ReqIdent("DND", first=other, second=newc) for other in eliminated]
     handler.registry = reg

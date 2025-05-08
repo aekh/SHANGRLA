@@ -143,7 +143,7 @@ contest_dict = {'1': {'name': '1',
                       'candidates': [str(i) for i in range(ncand)],
                       'winner': [str(winner)],
                       'assertion_file': "./assertions_temp.json",
-                      'assertion_json': assertions,
+                      # 'assertion_json': assertions,
                       'audit_type': Audit.AUDIT_TYPE.CARD_COMPARISON,
                       'test': NonnegMean.alpha_mart,
                       'estim': NonnegMean.optimal_comparison
